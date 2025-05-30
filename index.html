@@ -95,9 +95,44 @@
     font-size: 1.18rem;
     text-align: justify;
   }
+  #ttsControl {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    background: #1e5bb8;
+    color: white;
+    padding: 12px 20px;
+    border:none;
+    border-radius: 25px;
+    cursor: pointer;
+    font-weight: 700;
+    font-size: 1rem;
+    box-shadow: 0 4px 12px rgba(30,91,184,0.4);
+    transition: background-color 0.3s ease;
+    z-index: 1000;
+  }
+  #ttsControl:hover {
+    background-color: #124c9a;
+  }
+  #ttsStatus {
+    position: fixed;
+    top: 65px;
+    right: 20px;
+    background: #1e5bb8cc;
+    color: white;
+    padding: 8px 16px;
+    border-radius: 20px;
+    font-weight: 600;
+    font-size: 0.9rem;
+    display: none;
+    z-index: 1000;
+  }
 </style>
 </head>
 <body>
+
+<button id="ttsControl" title="Nghe nội dung trang">▶ Nghe văn bản</button>
+<div id="ttsStatus">Đang đọc...</div>
 
 <h1>HỌC MÀ CHƠI - CHƠI MÀ HỌC</h1>
 <p><strong>Tác giả:</strong> Sơn Nguyễn &nbsp;&nbsp;&nbsp; <strong>Biên tập:</strong> Cáo (Grok 3)</p>
@@ -278,6 +313,97 @@
     Hãy vẽ “ngôi sao” ước mơ của bạn, ghi lại 3 bước nhỏ cần hoàn thành trong tháng này. Mỗi tuần đánh dấu tiến bộ và hỏi: “Mình cảm thấy thế nào?” Đừng quên tự thưởng cho bản thân vì mỗi nỗ lực dù nhỏ nhất.
   </div>
 </section>
+
+<script>
+  const ttsButton = document.getElementById('ttsControl');
+  const ttsStatus = document.getElementById('ttsStatus');
+
+  // Collect all text nodes inside chapter sections for TTS
+  function getTextForTTS() {
+    // Joining the text content of select elements in order.
+    const chapters = document.querySelectorAll('.chapter');
+    let texts = [];
+    chapters.forEach(chapter => {
+      // Get header text
+      const header = chapter.querySelector('h2');
+      if(header) texts.push(header.textContent.trim());
+
+      // Get direct p elements inside chapter
+      const paragraphs = chapter.querySelectorAll('p');
+      paragraphs.forEach(p => texts.push(p.textContent.trim()));
+
+      // Get special dialogue sections
+      const dialogues = chapter.querySelectorAll('.dialogue, .reflection, .story-real, .step');
+      dialogues.forEach(elm => texts.push(elm.textContent.trim()));
+
+      // Get blockquotes
+      const quotes = chapter.querySelectorAll('blockquote');
+      quotes.forEach(q => texts.push(q.textContent.trim()));
+    });
+
+    return texts.filter(txt => txt.length > 0);
+  }
+
+  let utteranceIndex = 0;
+  let utterances = [];
+  let isSpeaking = false;
+
+  function speakTexts(texts) {
+    if(!('speechSynthesis' in window)) {
+      alert('Trình duyệt của bạn không hỗ trợ chức năng đọc chữ. Vui lòng sử dụng trình duyệt mới hơn.');
+      return;
+    }
+
+    if(isSpeaking) {
+      // Stop speaking if already speaking
+      window.speechSynthesis.cancel();
+      isSpeaking = false;
+      ttsStatus.style.display = 'none';
+      ttsButton.textContent = '▶ Nghe văn bản';
+      return;
+    }
+
+    utterances = texts.map(text => {
+      let u = new SpeechSynthesisUtterance(text);
+      u.lang = 'vi-VN';
+      u.rate = 1; // Speed 0.1 to 10, 1 is normal
+      u.pitch = 1; // Pitch 0 to 2
+      return u;
+    });
+
+    utteranceIndex = 0;
+    isSpeaking = true;
+    ttsStatus.style.display = 'block';
+    ttsButton.textContent = '■ Dừng đọc';
+
+    utterances[utteranceIndex].onend = function() {
+      utteranceIndex++;
+      if(utteranceIndex < utterances.length && isSpeaking) {
+        window.speechSynthesis.speak(utterances[utteranceIndex]);
+      } else {
+        // Finished all
+        isSpeaking = false;
+        ttsStatus.style.display = 'none';
+        ttsButton.textContent = '▶ Nghe văn bản';
+      }
+    };
+
+    window.speechSynthesis.speak(utterances[utteranceIndex]);
+  }
+
+  ttsButton.addEventListener('click', () => {
+    if(!isSpeaking) {
+      const texts = getTextForTTS();
+      speakTexts(texts);
+    } else {
+      // Stop reading
+      window.speechSynthesis.cancel();
+      isSpeaking = false;
+      ttsStatus.style.display = 'none';
+      ttsButton.textContent = '▶ Nghe văn bản';
+    }
+  });
+</script>
 
 </body>
 </html>
