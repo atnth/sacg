@@ -13,6 +13,11 @@
     background: #fafafa;
     color: #222;
   }
+  @media (max-width: 600px) {
+    body {
+      padding: 20px 15px;
+    }
+  }
   h1, h2 {
     color: #1e5bb8;
     font-weight: 700;
@@ -28,6 +33,16 @@
     font-size: 2.25rem;
     margin-bottom: 1.2em;
   }
+  @media (max-width: 600px) {
+    h1 {
+      font-size: 2.2rem;
+      margin-top: 1.5em;
+    }
+    h2 {
+      font-size: 1.6rem;
+      margin-bottom: 1em;
+    }
+  }
   .chapter {
     background: #fff;
     padding: 50px 55px;
@@ -37,6 +52,13 @@
     max-width: 960px;
     margin-left: auto;
     margin-right: auto;
+  }
+  @media (max-width: 600px) {
+    .chapter {
+      padding: 25px 20px;
+      margin-top: 2em;
+      border-radius: 14px;
+    }
   }
   .dialogue {
     background: #e5eefa;
@@ -49,6 +71,15 @@
     font-size: 1.22rem;
     line-height: 2.2;
   }
+  @media (max-width: 600px) {
+    .dialogue {
+      padding: 16px 20px;
+      font-size: 1rem;
+      margin: 2em 0;
+      border-radius: 10px;
+      border-left-width: 5px;
+    }
+  }
   .reflection {
     font-style: italic;
     color: #555;
@@ -60,6 +91,15 @@
     font-size: 1.15rem;
     line-height: 2;
   }
+  @media (max-width: 600px) {
+    .reflection {
+      padding: 16px 20px;
+      font-size: 1rem;
+      margin: 2em 0;
+      border-radius: 10px;
+      border-left-width: 5px;
+    }
+  }
   .story-real {
     background: #f5faff;
     border-left: 8px solid #124c9a;
@@ -69,6 +109,15 @@
     color: #123a79;
     font-size: 1.18rem;
     line-height: 2.2;
+  }
+  @media (max-width: 600px) {
+    .story-real {
+      padding: 20px 25px;
+      font-size: 1rem;
+      margin: 3em 0;
+      border-radius: 12px;
+      border-left-width: 6px;
+    }
   }
   .step {
     margin: 35px 0;
@@ -81,6 +130,15 @@
     font-size: 1.3rem;
     text-align: left;
   }
+  @media (max-width: 600px) {
+    .step {
+      padding: 20px 25px;
+      font-size: 1.1rem;
+      margin: 25px 0;
+      border-width: 3px;
+      border-radius: 12px;
+    }
+  }
   blockquote {
     margin: 4em 5em;
     font-style: italic;
@@ -90,10 +148,24 @@
     font-size: 1.3rem;
     line-height: 2.3;
   }
+  @media (max-width: 600px) {
+    blockquote {
+      margin: 2em 1em;
+      font-size: 1.05rem;
+      border-left-width: 6px;
+      padding-left: 20px;
+    }
+  }
   p {
     margin: 1.5em 0;
     font-size: 1.18rem;
     text-align: justify;
+  }
+  @media (max-width: 600px) {
+    p {
+      font-size: 1rem;
+      margin: 1.2em 0;
+    }
   }
   #ttsControl {
     position: fixed;
@@ -110,6 +182,7 @@
     box-shadow: 0 4px 12px rgba(30,91,184,0.4);
     transition: background-color 0.3s ease;
     z-index: 1000;
+    user-select: none;
   }
   #ttsControl:hover {
     background-color: #124c9a;
@@ -126,6 +199,7 @@
     font-size: 0.9rem;
     display: none;
     z-index: 1000;
+    user-select: none;
   }
 </style>
 </head>
@@ -318,85 +392,67 @@
   const ttsButton = document.getElementById('ttsControl');
   const ttsStatus = document.getElementById('ttsStatus');
 
-  // Collect all text nodes inside chapter sections for TTS
-  function getTextForTTS() {
-    // Joining the text content of select elements in order.
+  // Async function that returns a Promise for when utterance ends
+  function speakUtterance(utterance) {
+    return new Promise((resolve) => {
+      utterance.onend = resolve;
+      window.speechSynthesis.speak(utterance);
+    });
+  }
+
+  // Collect all text content from chapters including headers, paragraphs, special blocks and quotes
+  function getAllTexts() {
     const chapters = document.querySelectorAll('.chapter');
     let texts = [];
     chapters.forEach(chapter => {
-      // Get header text
       const header = chapter.querySelector('h2');
       if(header) texts.push(header.textContent.trim());
 
-      // Get direct p elements inside chapter
       const paragraphs = chapter.querySelectorAll('p');
       paragraphs.forEach(p => texts.push(p.textContent.trim()));
 
-      // Get special dialogue sections
-      const dialogues = chapter.querySelectorAll('.dialogue, .reflection, .story-real, .step');
-      dialogues.forEach(elm => texts.push(elm.textContent.trim()));
+      const specialBlocks = chapter.querySelectorAll('.dialogue, .reflection, .story-real, .step');
+      specialBlocks.forEach(block => texts.push(block.textContent.trim()));
 
-      // Get blockquotes
       const quotes = chapter.querySelectorAll('blockquote');
       quotes.forEach(q => texts.push(q.textContent.trim()));
     });
 
-    return texts.filter(txt => txt.length > 0);
+    return texts.filter(t => t.length > 0);
   }
 
-  let utteranceIndex = 0;
-  let utterances = [];
   let isSpeaking = false;
 
-  function speakTexts(texts) {
-    if(!('speechSynthesis' in window)) {
+  async function speakTextsSequentially(texts) {
+    if (!('speechSynthesis' in window)) {
       alert('Trình duyệt của bạn không hỗ trợ chức năng đọc chữ. Vui lòng sử dụng trình duyệt mới hơn.');
       return;
     }
 
-    if(isSpeaking) {
-      // Stop speaking if already speaking
-      window.speechSynthesis.cancel();
-      isSpeaking = false;
-      ttsStatus.style.display = 'none';
-      ttsButton.textContent = '▶ Nghe văn bản';
-      return;
-    }
-
-    utterances = texts.map(text => {
-      let u = new SpeechSynthesisUtterance(text);
-      u.lang = 'vi-VN';
-      u.rate = 1; // Speed 0.1 to 10, 1 is normal
-      u.pitch = 1; // Pitch 0 to 2
-      return u;
-    });
-
-    utteranceIndex = 0;
     isSpeaking = true;
     ttsStatus.style.display = 'block';
     ttsButton.textContent = '■ Dừng đọc';
 
-    utterances[utteranceIndex].onend = function() {
-      utteranceIndex++;
-      if(utteranceIndex < utterances.length && isSpeaking) {
-        window.speechSynthesis.speak(utterances[utteranceIndex]);
-      } else {
-        // Finished all
-        isSpeaking = false;
-        ttsStatus.style.display = 'none';
-        ttsButton.textContent = '▶ Nghe văn bản';
-      }
-    };
+    for (let i = 0; i < texts.length; i++) {
+      if (!isSpeaking) break;
 
-    window.speechSynthesis.speak(utterances[utteranceIndex]);
+      const utterance = new SpeechSynthesisUtterance(texts[i]);
+      utterance.lang = 'vi-VN';
+      utterance.rate = 1;
+      utterance.pitch = 1;
+      await speakUtterance(utterance);
+    }
+
+    isSpeaking = false;
+    ttsStatus.style.display = 'none';
+    ttsButton.textContent = '▶ Nghe văn bản';
   }
 
   ttsButton.addEventListener('click', () => {
-    if(!isSpeaking) {
-      const texts = getTextForTTS();
-      speakTexts(texts);
+    if (!isSpeaking) {
+      const texts = getAllTexts();
+      speakTextsSequentially(texts);
     } else {
-      // Stop reading
       window.speechSynthesis.cancel();
       isSpeaking = false;
       ttsStatus.style.display = 'none';
@@ -407,4 +463,3 @@
 
 </body>
 </html>
-
